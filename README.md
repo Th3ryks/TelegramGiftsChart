@@ -95,4 +95,4 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## Author ✍️
 
-[@Th3ryks](https://github.com/Th3ryks) 
+[@Th3ryks](https://t.me/Th3ryks) 
