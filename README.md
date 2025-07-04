@@ -34,11 +34,12 @@ pip install -r requirements.txt
 3. Create a `.env` file in the root directory with your credentials:
 ```env
 # Telegram Bot Token (from @BotFather)
-TELEGRAM_BOT_TOKEN=your_bot_token_here
+TELEGRAM_BOT_TOKEN='your_bot_token_here'
 
 # Telegram API Credentials (from https://my.telegram.org/apps)
-API_ID=your_api_id_here
-API_HASH=your_api_hash_here
+API_ID='your_api_id_here'
+API_HASH='your_api_hash_here'
+PHONE_NUMBER='your_phone_number_here'
 ```
 
 4. Set up your Telegram session:
