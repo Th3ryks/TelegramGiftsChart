@@ -12,6 +12,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from dotenv import load_dotenv
 from PIL import Image
 from io import BytesIO
+from aiogram.exceptions import TelegramForbiddenError
 
 from src.generators.chart_generator import generate_chart_image, PriceData as ChartPriceData
 from src.generators.card_generator import draw_card
@@ -276,13 +277,18 @@ init_db()
 @dp.message(CommandStart())
 async def start_command(message: types.Message):
     """Handle the /start command"""
-    user_name = message.from_user.first_name if message.from_user else "there"
-    await message.answer(
-        f"Hi {user_name}! I'm the Telegram Gift Price Bot 🎁\n\n"
-        "I can show you price cards for Telegram gifts with modern cool chart photos 📊\n\n"
-        "Just send me the name of any Telegram gift to see its price chart! ✨\n\n"
-        "For example, try: 'Plush Pepe 🐸', 'Crystal Ball 🔮', 'Heart Locket 💝', etc."
-    )
+    try:
+        user_name = message.from_user.first_name if message.from_user else "there"
+        await message.answer(
+            f"Hi {user_name}! I'm the Telegram Gift Price Bot 🎁\n\n"
+            "I can show you price cards for Telegram gifts with modern cool chart photos 📊\n\n"
+            "Just send me the name of any Telegram gift to see its price chart! ✨\n\n"
+            "For example, try: 'Plush Pepe 🐸', 'Crystal Ball 🔮', 'Heart Locket 💝', etc."
+        )
+    except TelegramForbiddenError:
+        logging.info(f"User {message.from_user.id if message.from_user else 'Unknown'} has blocked the bot")
+    except Exception as e:
+        logging.error(f"Error in start_command: {e}")
 
 async def generate_and_send_chart(chat_id: int, gift_name: str, message_id: Optional[int] = None) -> bool:
     """Generate and send chart image"""
@@ -392,70 +398,79 @@ async def generate_and_send_chart(chat_id: int, gift_name: str, message_id: Opti
 @dp.message()
 async def handle_gift_request(message: types.Message):
     """Handle gift name messages"""
-    if not message.text:
-        await message.answer("Please send me a text message with the gift name! 🎁")
-        return
-    
-    if not message.from_user:
-        await message.answer("Error identifying user ❌")
-        return
-    
-    user_id = message.from_user.id
-    
-    # Check rate limit only if there was a successful request
-    last_success = get_last_success_time(user_id)
-    if last_success is not None:
-        time_since_last = datetime.now().timestamp() - last_success
-        if time_since_last < RATE_LIMIT_SECONDS:
-            await message.answer(f"Please wait {RATE_LIMIT_SECONDS - int(time_since_last)} seconds before making another request ⏳")
+    try:
+        if not message.text:
+            await message.answer("Please send me a text message with the gift name! 🎁")
             return
         
-    # Clean up the gift name
-    gift_name = message.text.strip()
-    if gift_name.lower().endswith(" 12h"):
-        gift_name = gift_name[:-4]
-    gift_name = gift_name.strip()
-    gift_name_lower = gift_name.lower()
-    
-    # Try to find the gift in our mapping first
-    mapped_name = GIFT_NAME_MAP.get(gift_name_lower)
-    if mapped_name:
-        gift_name = mapped_name
-        gift_name_lower = mapped_name.lower()
-    
-    # Check if the gift exists
-    if gift_name_lower not in gifts_names:
-        # Get list of similar gifts for suggestion
-        similar_gifts = []
-        # First check GIFT_NAME_MAP for similar names
-        for key, value in GIFT_NAME_MAP.items():
-            if any(word in key for word in gift_name_lower.split()):
-                if value not in similar_gifts:
-                    similar_gifts.append(value)
-        # Then check original names if we don't have enough suggestions
-        if len(similar_gifts) < 5:
-            for name in gifts_data.values():
-                if name not in similar_gifts and any(word in name.lower() for word in gift_name_lower.split()):
-                    similar_gifts.append(name)
-                if len(similar_gifts) >= 5:
-                    break
+        if not message.from_user:
+            await message.answer("Error identifying user ❌")
+            return
         
-        suggestion_text = "\n\nDid you mean one of these? 🤔\n" + "\n".join([f"• {name} ✨" for name in similar_gifts[:5]]) if similar_gifts else ""
+        user_id = message.from_user.id
         
-        await message.answer(
-            f"Sorry, I couldn't find '{gift_name}'. Please check the gift name and try again! 🔍" + suggestion_text
-        )
-        return
+        # Check rate limit only if there was a successful request
+        last_success = get_last_success_time(user_id)
+        if last_success is not None:
+            time_since_last = datetime.now().timestamp() - last_success
+            if time_since_last < RATE_LIMIT_SECONDS:
+                await message.answer(f"Please wait {RATE_LIMIT_SECONDS - int(time_since_last)} seconds before making another request ⏳")
+                return
+            
+        # Clean up the gift name
+        gift_name = message.text.strip()
+        if gift_name.lower().endswith(" 12h"):
+            gift_name = gift_name[:-4]
+        gift_name = gift_name.strip()
+        gift_name_lower = gift_name.lower()
+        
+        # Try to find the gift in our mapping first
+        mapped_name = GIFT_NAME_MAP.get(gift_name_lower)
+        if mapped_name:
+            gift_name = mapped_name
+            gift_name_lower = mapped_name.lower()
+        
+        # Check if the gift exists
+        if gift_name_lower not in gifts_names:
+            # Get list of similar gifts for suggestion
+            similar_gifts = []
+            # First check GIFT_NAME_MAP for similar names
+            for key, value in GIFT_NAME_MAP.items():
+                if any(word in key for word in gift_name_lower.split()):
+                    if value not in similar_gifts:
+                        similar_gifts.append(value)
+            # Then check original names if we don't have enough suggestions
+            if len(similar_gifts) < 5:
+                for name in gifts_data.values():
+                    if name not in similar_gifts and any(word in name.lower() for word in gift_name_lower.split()):
+                        similar_gifts.append(name)
+                    if len(similar_gifts) >= 5:
+                        break
+            
+            suggestion_text = "\n\nDid you mean one of these? 🤔\n" + "\n".join([f"• {name} ✨" for name in similar_gifts[:5]]) if similar_gifts else ""
+            
+            await message.answer(
+                f"Sorry, I couldn't find '{gift_name}'. Please check the gift name and try again! 🔍" + suggestion_text
+            )
+            return
 
-    # Send processing message
-    processing_msg = await message.answer(f"Generating price chart for {gift_name} 🎨...")
-    
-    # Generate and send chart
-    success = await generate_and_send_chart(message.chat.id, gift_name, processing_msg.message_id)
-    
-    # Update rate limit only on success
-    if success:
-        update_last_success(user_id)
+        # Send processing message
+        processing_msg = await message.answer(f"Generating price chart for {gift_name} 🎨...")
+        
+        # Generate and send chart
+        success = await generate_and_send_chart(message.chat.id, gift_name, processing_msg.message_id)
+        
+        # Update rate limit only on success
+        if success:
+            update_last_success(user_id)
+    except TelegramForbiddenError:
+        logging.info(f"User {message.from_user.id if message.from_user else 'Unknown'} has blocked the bot")
+    except Exception as e:
+        logging.error(f"Error in handle_gift_request: {e}")
+        try:
+            await message.answer("Sorry, something went wrong while processing your request. Please try again later! 😔")
+        except TelegramForbiddenError:
+            pass
 
 async def main():
     """Main function to start the bot"""
